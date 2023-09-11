@@ -10,6 +10,9 @@ mutable struct Bus
     price_sensitive_loads::Vector
 end
 
+"""
+Marginal costs over relative MW productions.
+"""
 mutable struct CostSegment
     mw::Vector{Float64}
     cost::Vector{Float64}

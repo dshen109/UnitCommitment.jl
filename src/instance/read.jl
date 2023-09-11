@@ -165,22 +165,26 @@ function _from_json(json; repair = true)
 
         # Read production cost curve
         K = length(dict["Production cost curve (MW)"])
-        curve_mw = hcat(
-            [timeseries(dict["Production cost curve (MW)"][k]) for k in 1:K]...,
-        )
-        curve_cost = hcat(
-            [timeseries(dict["Production cost curve (\$)"][k]) for k in 1:K]...,
-        )
-        min_power = curve_mw[:, 1]
-        max_power = curve_mw[:, K]
-        min_power_cost = curve_cost[:, 1]
-        segments = CostSegment[]
-        for k in 2:K
-            amount = curve_mw[:, k] - curve_mw[:, k-1]
-            cost = (curve_cost[:, k] - curve_cost[:, k-1]) ./ amount
-            replace!(cost, NaN => 0.0)
-            push!(segments, CostSegment(amount, cost))
-        end
+        # curve_mw = hcat(
+        #     [timeseries(dict["Production cost curve (MW)"][k]) for k in 1:K]...,
+        # )
+        # curve_cost = hcat(
+        #     [timeseries(dict["Production cost curve (\$)"][k]) for k in 1:K]...,
+        # )
+        # min_power = curve_mw[:, 1]
+        # max_power = curve_mw[:, K]
+        # min_power_cost = curve_cost[:, 1]
+        # segments = CostSegment[]
+        # for k in 2:K
+        #     amount = curve_mw[:, k] - curve_mw[:, k-1]
+        #     cost = (curve_cost[:, k] - curve_cost[:, k-1]) ./ amount
+        #     replace!(cost, NaN => 0.0)
+        #     push!(segments, CostSegment(amount, cost))
+        # end
+        segments, min_power, max_power, min_power_cost = _create_cost_segments(
+        # _create_cost_segments(
+            dict["Production cost curve (MW)"],
+            dict["Production cost curve (\$)"], T)
 
         # Read startup costs
         startup_delays = scalar(dict["Startup delays (h)"], default = [1])
@@ -330,4 +334,41 @@ function _from_json(json; repair = true)
         UnitCommitment.repair!(instance)
     end
     return instance
+end
+
+"""
+Create vector of cost segments where each entry corresponds to the same
+segment index over the periods.
+
+For example, specifying 3 periods with 4 segments in each period would return
+a Vector of length 4, where each CostSegment has 3 entries.
+
+T timeperiods
+K segments
+"""
+function _create_cost_segments(mw::Vector{Any}, cost::Vector{Any}, T::Int)
+    if mw[1] isa Number
+        K = length(mw)
+        curve_mw = Number.(transpose(reshape(repeat(mw, T), K, T)))
+        curve_cost = Number.(transpose(reshape(repeat(cost, T), K, T)))
+    # Implies time-varying costs
+    else
+        K = length(mw[1])
+        curve_mw = transpose(hcat(mw...))
+        curve_cost = transpose(hcat(cost...))
+    end
+    min_power = curve_mw[:, 1]
+    max_power = curve_mw[:, K]
+    min_power_cost = curve_cost[:, 1]
+
+    segments = CostSegment[]
+    for k in 2:K
+        amount = curve_mw[:, k] - curve_mw[:, k-1]
+        cost = (curve_cost[:, k] - curve_cost[:, k-1]) ./ amount
+        replace!(cost, NaN => 0.0)
+        push!(segments, CostSegment(amount, cost))
+    end
+
+    return segments, min_power, max_power, min_power_cost
+
 end
